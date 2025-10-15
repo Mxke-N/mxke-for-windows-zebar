@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <!-- Custom styles. -->
+    <link rel="stylesheet" type="text/css" href="./styles.css" />
+
+    <!-- Allows React to be run buildless via "text/babel" script below. -->
+    <script
+      src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"
+      integrity="sha256-aS0B0wnsaDByLfE16h4MDCP1fQFccysd1YWOcV+gbBo="
+      crossorigin="anonymous"
+    ></script>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+      import React, { useState, useEffect } from "https://esm.sh/react@18?dev";
+      import { createRoot } from "https://esm.sh/react-dom@18/client?dev";
+      import * as zebar from "https://esm.sh/zebar@3.0";
+
+      const providers = zebar.createProviderGroup({
+        media: { type: "media" },
+        glazewm: { type: "glazewm" },
+        network: { type: "network", refreshInterval: 2500 },
+        cpu: { type: "cpu" },
+        memory: { type: "memory" },
+      });
+
+      createRoot(document.getElementById("root")).render(<App />);
+
+      function ScrollingText({ text, mySession, speed = 20, width = 330 }) {
+        const containerRef = React.useRef(null);
+        const textRef = React.useRef(null);
+        const [textWidth, setTextWidth] = React.useState(0);
+        const [progress, setProgress] = React.useState(0);
+
+        React.useEffect(() => {
+          const container = containerRef.current;
+          const textEl = textRef.current;
+
+          if (container && textEl) {
+            setTextWidth(textEl.scrollWidth);
+          }
+        }, [text]);
+
+        React.useEffect(() => {
+          const new_progress =
+            (mySession.position - mySession.startTime) /
+            (mySession.endTime - mySession.startTime);
+          setProgress(Math.max(0, Math.min(1, new_progress)));
+        }, [mySession]);
+
+        return (
+          <div
+            ref={containerRef}
+            style={{
+              width: `${width}px`,
+              height: "25px",
+              overflow: "hidden",
+              whiteSpace: "nowrap",
+              position: "relative",
+            }}
+          >
+            <div
+              className="scroll-track"
+              style={{
+                display: "flex",
+                width: `${textWidth * 2}px`,
+                animation: `scroll-left ${textWidth / speed}s linear infinite`,
+                justifyContent: "none",
+                paddingTop: "3px",
+              }}
+            >
+              <>
+                <span ref={textRef} style={{ paddingRight: "34px" }}>
+                  {text}
+                </span>
+                <span style={{ paddingRight: "34px" }}>{text}</span>
+                <span style={{ paddingRight: "34px" }}>{text}</span>
+                <span style={{ paddingRight: "34px" }}>{text}</span>
+              </>
+            </div>
+            {/* Progress bar */}
+            <div
+              style={{
+                position: "absolute",
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: "2px",
+                borderRadius: "2px",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  width: `${progress * 100}%`,
+                  height: "100%",
+                  background: "#1DB954",
+                  transition: "width 4000ms ease-out",
+                }}
+              ></div>
+            </div>
+          </div>
+        );
+      }
+
+      function NetworkGraph({
+        value,
+        color,
+        max = 1_000_000,
+        width = 60,
+        height = 18,
+        historyLen = 40,
+      }) {
+        // value: bytes per second
+        const [history, setHistory] = React.useState(Array(historyLen).fill(0));
+
+        React.useEffect(() => {
+          setHistory((h) => {
+            const next = [...h.slice(1), value];
+            return next;
+          });
+        }, [value]);
+
+        // Normalize values for graph
+        const points = history
+          .map((v, i) => {
+            const y = height - (Math.min(v, max) / max) * height;
+            const x = (i / (historyLen - 1)) * width;
+            return `${x},${y}`;
+          })
+          .join(" ");
+
+        return (
+          <svg
+            width={width}
+            height={height}
+            style={{ margin: "0 6px", overflow: "hidden" }}
+          >
+            <polyline
+              fill="none"
+              stroke={color}
+              strokeWidth="2"
+              points={points}
+            />
+          </svg>
+        );
+      }
+
+      function getNetworkGraphMax(value) {
+        // value is in bytes/sec
+        const KB = 1_000;
+        const MB = 1_000_000;
+        if (value < 50 * KB) return 50 * KB; // 100 kB/s
+        if (value < 100 * KB) return 100 * KB; // 100 kB/s
+        if (value < 500 * KB) return 500 * KB; // 500 kB/s
+        if (value < 1 * MB) return 1 * MB; // 1 MB/s
+        if (value < 5 * MB) return 5 * MB; // 5 MB/s
+        if (value < 10 * MB) return 10 * MB; // 10 MB/s
+        if (value < 25 * MB) return 25 * MB; // 25 MB/s
+        if (value < 50 * MB) return 50 * MB; // 50 MB/s
+        if (value < 100 * MB) return 100 * MB; // 100 MB/s
+        if (value < 250 * MB) return 250 * MB; // 250 MB/s
+        return 500 * MB; // 500 MB/s (500 MB/s = ~4 Gbps)
+      }
+
+      function App() {
+        const [output, setOutput] = useState(providers.outputMap);
+        const [spotifySession, setSpotifySession] = useState(null);
+
+        useEffect(() => {
+          providers.onOutput(() => setOutput(providers.outputMap));
+        }, []);
+
+        useEffect(() => {
+          const mySpotifySession = output.media?.allSessions?.find((session) =>
+            session.sessionId.includes("Spotify")
+          );
+          setSpotifySession(mySpotifySession || null);
+        }, [output.media?.allSessions]);
+
+        // Get icon to show for current network status.
+        function getNetworkIcon(networkOutput) {
+          switch (networkOutput.defaultInterface?.type) {
+            case "ethernet":
+              return <i className="nf nf-md-ethernet_cable"></i>;
+            case "proprietary_virtual":
+              return <i className="nf nf-md-shield_lock_outline"></i>;
+            case "wifi":
+              if (networkOutput.defaultGateway?.signalStrength >= 80) {
+                return <i className="nf nf-md-wifi_strength_4"></i>;
+              } else if (networkOutput.defaultGateway?.signalStrength >= 65) {
+                return <i className="nf nf-md-wifi_strength_3"></i>;
+              } else if (networkOutput.defaultGateway?.signalStrength >= 40) {
+                return <i className="nf nf-md-wifi_strength_2"></i>;
+              } else if (networkOutput.defaultGateway?.signalStrength >= 25) {
+                return <i className="nf nf-md-wifi_strength_1"></i>;
+              } else {
+                return <i className="nf nf-md-wifi_strength_outline"></i>;
+              }
+            default:
+              return <i className="nf nf-md-wifi_strength_off_outline"></i>;
+          }
+        }
+
+        return (
+          <div className="app">
+            <div className="left">
+              {output.media && spotifySession && (
+                <div
+                  className="now-playing"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5em",
+                    marginTop: "1px",
+                  }}
+                >
+                  <i
+                    className="nf nf-fa-spotify"
+                    style={{
+                      marginTop: "1px",
+                      marginRight: "4px",
+                      fontSize: "24px",
+                      color: "#1DB954",
+                    }}
+                  ></i>
+                  <ScrollingText
+                    text={`${spotifySession.title}${
+                      spotifySession.artist ? " – " + spotifySession.artist : ""
+                    }`}
+                    mySession={spotifySession}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="center">
+              {output.glazewm && (
+                <div className="workspaces">
+                  {output.glazewm.currentWorkspaces.map((workspace) => (
+                    <button
+                      className={`workspace ${
+                        workspace.hasFocus && "focused"
+                      } ${workspace.isDisplayed && "displayed"}`}
+                      key={workspace.name}
+                    >
+                      {workspace.displayName ?? workspace.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="right">
+              {output.glazewm && (
+                <button
+                  className={`tiling-direction nf ${
+                    output.glazewm.tilingDirection === "horizontal"
+                      ? "nf-md-swap_horizontal"
+                      : "nf-md-swap_vertical"
+                  }`}
+                ></button>
+              )}
+
+              {/* --- Network Section --- */}
+              {output.network && output.network.traffic && (
+                <div
+                  className="network-traffic"
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-end",
+                    justifyContent: "center",
+                    marginRight: "50px",
+                    marginTop: "-2px",
+                    minWidth: "300px",
+                    maxWidth: "300px",
+                  }}
+                >
+                  {/* Download */}
+                  <NetworkGraph
+                    value={output.network.traffic.received.bytes}
+                    color="#ff007a"
+                    max={getNetworkGraphMax(
+                      output.network.traffic.received.bytes
+                    )}
+                  />
+                  <div
+                    style={{
+                      width: "80px",
+                      textAlign: "left",
+                      marginRight: 8,
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: "#ff007a",
+                        fontWeight: "bold",
+                        textShadow: "0 0 8px #ff007a",
+                        display: "flex",
+                        alignItems: "flex-end",
+                      }}
+                    >
+                      <i
+                        className="nf nf-md-download"
+                        style={{ color: "#ff007a", marginRight: "1.5px" }}
+                      ></i>
+                      {output.network.traffic.received.siValue.toFixed(1)}
+                      {output.network.traffic.received.siUnit}/s
+                    </span>
+                  </div>
+
+                  {/* Upload */}
+                  <NetworkGraph
+                    value={output.network.traffic.transmitted.bytes}
+                    color="#b400ff"
+                    max={getNetworkGraphMax(
+                      output.network.traffic.transmitted.bytes
+                    )}
+                  />
+                  <div
+                    style={{
+                      width: "80px",
+                      textAlign: "left",
+                      marginRight: 8,
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: "#b400ff",
+                        fontWeight: "bold",
+                        textShadow: "0 0 8px #b400ff",
+                        display: "flex",
+                        alignItems: "flex-end",
+                      }}
+                    >
+                      <i
+                        className="nf nf-md-upload"
+                        style={{
+                          color: "#b400ff",
+                          marginRight: "1.5px",
+                        }}
+                      ></i>
+                      {output.network.traffic.transmitted.siValue.toFixed(1)}
+                      {output.network.traffic.transmitted.siUnit}/s
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {output.memory && (
+                <div className="memory">
+                  <i className="nf nf-fae-chip"></i>
+                  {Math.round(output.memory.usage)}%
+                </div>
+              )}
+              {output.cpu && (
+                <div className="cpu">
+                  <i className="nf nf-oct-cpu"></i>
+
+                  {/* Change the text color if the CPU usage is high. */}
+                  <span className={output.cpu.usage > 85 ? "high-usage" : ""}>
+                    {Math.round(output.cpu.usage)}%
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+    </script>
+  </body>
+</html>

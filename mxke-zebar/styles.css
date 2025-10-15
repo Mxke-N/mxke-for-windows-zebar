@@ -1,0 +1,195 @@
+/**
+ * Import the Nerdfonts icon font.
+ * Ref https://www.nerdfonts.com/cheat-sheet for a cheatsheet of available Nerdfonts icons.
+ */
+@import "https://www.nerdfonts.com/assets/css/webfont.css";
+
+:root {
+  --text-size: 14px;
+  --icon-size: 14px;
+
+  --text-color-light: rgba(0 0 0 / 100%);
+  --text-color-dark: rgba(255 255 255 / 100%);
+
+  --icon-color-light: LightSteelBlue;
+  --icon-color-dark: rgb(75 115 255 / 100%);
+
+  --background-color-light: rgba(238 238 238 / 90%);
+  --background-color-dark: transparent;
+}
+
+@media (prefers-color-scheme: light) {
+  body {
+    color: var(--text-color-light);
+  }
+
+  i {
+    color: var(--icon-color-light);
+  }
+
+  #root {
+    background: var(--background-color-light);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    color: var(--text-color-dark);
+  }
+
+  i {
+    color: var(--icon-color-dark);
+  }
+
+  #root {
+    background: var(--background-color-dark);
+  }
+}
+
+i {
+  margin-right: 7px;
+  font-size: var(--icon-size);
+}
+
+body {
+  font-family: "Segoe UI", ui-monospace, monospace;
+  font-size: var(--text-size);
+  overflow: hidden;
+  padding: 0px 8px;
+}
+
+div,
+span,
+p {
+  cursor: default;
+  user-select: none;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+#root {
+  border-radius: 0px 0px 10px 10px;
+  background: rgba(22, 22, 22, 0.6);
+  border-bottom: 1.5px solid rgb(255 255 255 / 20%);
+  padding-bottom: 4px;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  align-items: center;
+  height: 100%;
+  padding: 4px 1.5vw;
+}
+
+.left,
+.center,
+.right {
+  display: flex;
+  align-items: center;
+}
+
+.left {
+  justify-content: flex-end;
+}
+
+.center {
+  justify-self: center;
+}
+
+.right {
+  justify-self: start;
+}
+
+.tiling-direction,
+.memory,
+.cpu {
+  margin-right: 20px;
+}
+
+.memory {
+  i {
+    color: rgb(75 115 255 / 100%);
+    text-shadow: 0 0 6px rgba(75, 115, 255, 0.5),
+      0 0 12px rgba(75, 115, 255, 0.3), 0 0 20px rgba(75, 115, 255, 0.1);
+  }
+}
+
+.cpu {
+  i {
+    color: orange;
+    text-shadow: 0 0 6px rgba(255, 165, 0, 0.5), 0 0 10px rgba(255, 140, 0, 0.3),
+      0 0 14px rgba(255, 120, 0, 0.1);
+  }
+}
+
+.workspaces {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workspace {
+  background: rgba(22, 22, 22, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 12px;
+  color: rgb(255 255 255 / 100%);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 200ms ease, border 200ms ease, color 200ms ease,
+    box-shadow 200ms ease;
+  font-weight: bold;
+
+  &.displayed,
+  &.focused,
+  &:hover {
+    background: rgb(96, 205, 255);
+    color: rgb(4, 8, 10);
+    box-shadow: 0 4px 6px rgba(200, 205, 255, 0.3);
+    border: 1px solid rgb(96, 205, 255);
+  }
+}
+
+.tiling-direction {
+  background: transparent;
+  color: rgb(255 255 255 / 100%);
+  border-radius: 2px;
+  line-height: 1;
+  padding: 4px 8px;
+  border: 0;
+  cursor: pointer;
+  margin-right: 50px;
+  /* margin-left: 375px; */
+}
+
+.cpu .high-usage {
+  color: #ff073a;
+}
+
+.now-playing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  i {
+    color: white;
+  }
+}
+
+@keyframes scroll-left {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0%);
+  }
+}
+
+/* Add to styles.css */
+.network-traffic span {
+  font-size: 13px;
+  letter-spacing: 0.5px;
+}
