@@ -23,7 +23,8 @@
       const providers = zebar.createProviderGroup({
         media: { type: "media" },
         glazewm: { type: "glazewm" },
-        network: { type: "network", refreshInterval: 1000 },
+        // High refresh rate for responsiveness
+        network: { type: "network", refreshInterval: 100 }, 
         cpu: { type: "cpu" },
         memory: { type: "memory" },
       });
@@ -110,7 +111,6 @@
       function NetworkGraph({
         value,
         color,
-        max = 1_000_000,
         width = 60,
         height = 18,
         historyLen = 40,
@@ -125,10 +125,22 @@
           });
         }, [value]);
 
+        // 💡 Calculate the max based on the current visible history
+        const historyMax = Math.max(...history);
+        
+        // Ensure the max is at least 1MB/s (1,000,000 B/s) to prevent tiny scaling when idle
+        const minMax = 1_000_000; 
+        
+        // Calculate the final scale max: 
+        // 1. Take the highest value in history, or the minimum value (1MB/s).
+        // 2. Add a 10% buffer (1.1x) to keep the peak off the graph ceiling for visual clarity.
+        const scaleMax = Math.max(historyMax, minMax) * 1.1;
+
         // Normalize values for graph
         const points = history
           .map((v, i) => {
-            const y = height - (Math.min(v, max) / max) * height;
+            // Use the calculated scaleMax for normalization
+            const y = height - (Math.min(v, scaleMax) / scaleMax) * height; 
             const x = (i / (historyLen - 1)) * width;
             return `${x},${y}`;
           })
@@ -150,27 +162,27 @@
         );
       }
 
+      // This function is no longer used for the graph scaling but is kept for context
       function getNetworkGraphMax(value) {
-        // value is in bytes/sec
         const KB = 1_000;
         const MB = 1_000_000;
-        if (value < 50 * KB) return 50 * KB; // 50 kB/s
-        if (value < 100 * KB) return 100 * KB; // 100 kB/s
-        if (value < 500 * KB) return 500 * KB; // 500 kB/s
-        if (value < 1 * MB) return 1 * MB; // 1 MB/s
-        if (value < 5 * MB) return 5 * MB; // 5 MB/s
-        if (value < 10 * MB) return 10 * MB; // 10 MB/s
-        if (value < 25 * MB) return 25 * MB; // 25 MB/s
-        if (value < 50 * MB) return 50 * MB; // 50 MB/s
-        if (value < 100 * MB) return 100 * MB; // 100 MB/s
-        if (value < 250 * MB) return 250 * MB; // 250 MB/s
-        return 500 * MB; // 500 MB/s (~4 Gbps)
+        if (value < 50 * KB) return 50 * KB;
+        if (value < 100 * KB) return 100 * KB;
+        if (value < 500 * KB) return 500 * KB;
+        if (value < 1 * MB) return 1 * MB;
+        if (value < 5 * MB) return 5 * MB;
+        if (value < 10 * MB) return 10 * MB;
+        if (value < 25 * MB) return 25 * MB;
+        if (value < 50 * MB) return 50 * MB;
+        if (value < 100 * MB) return 100 * MB;
+        if (value < 250 * MB) return 250 * MB;
+        return 500 * MB;
       }
 
       function App() {
         const [output, setOutput] = useState(providers.outputMap);
         const [spotifySession, setSpotifySession] = useState(null);
-        const [networkMax, setNetworkMax] = useState(1_000_000); // Start at 1MB/s
+        // ❌ networkMax state and its useEffect hook were removed to simplify scaling
 
         useEffect(() => {
           providers.onOutput(() => setOutput(providers.outputMap));
@@ -182,36 +194,6 @@
           );
           setSpotifySession(mySpotifySession || null);
         }, [output.media?.allSessions]);
-
-        // Hook to handle the smoothing of the network graph's max value
-        useEffect(() => {
-          if (output.network?.traffic) {
-            const currentReceived = output.network.traffic.received.bytes;
-            const currentTransmitted = output.network.traffic.transmitted.bytes;
-            const currentMaxTraffic = Math.max(currentReceived, currentTransmitted);
-
-            // Calculate the 'ideal' max tier based on the current traffic peak
-            const idealMaxTier = getNetworkGraphMax(currentMaxTraffic);
-
-            setNetworkMax(prevMax => {
-              // Instant increase: If the current traffic pushes the max to a higher tier, adopt it immediately.
-              if (idealMaxTier > prevMax) {
-                return idealMaxTier;
-              }
-
-              // Slow decrease: If the traffic has dropped, let the max slowly decay.
-              if (idealMaxTier < prevMax) {
-                const decayFactor = 0.99; 
-                const newDecayedMax = prevMax * decayFactor;
-
-                // Ensure the new max doesn't fall below the ideal tier.
-                return Math.max(idealMaxTier, newDecayedMax);
-              }
-
-              return prevMax; // Traffic is within the current max, so keep it steady.
-            });
-          }
-        }, [output.network?.traffic]); // Depend on network traffic updates
 
         // Get icon to show for current network status.
         function getNetworkIcon(networkOutput) {
@@ -315,7 +297,7 @@
                   <NetworkGraph
                     value={output.network.traffic.received.bytes}
                     color="#ff007a"
-                    max={networkMax}
+                    // ❌ No max prop needed, scaling is now internal
                   />
                   <div
                     style={{
@@ -346,7 +328,7 @@
                   <NetworkGraph
                     value={output.network.traffic.transmitted.bytes}
                     color="#b400ff"
-                    max={networkMax}
+                    // ❌ No max prop needed, scaling is now internal
                   />
                   <div
                     style={{
@@ -361,7 +343,7 @@
                         fontWeight: "bold",
                         textShadow: "0 0 8px #b400ff",
                         display: "flex",
-                        alignItems: "flex-end"
+                        alignItems: "flex-end",
                       }}
                     >
                       <i
