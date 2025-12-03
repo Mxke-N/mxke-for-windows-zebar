@@ -4,10 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <!-- Custom styles. -->
     <link rel="stylesheet" type="text/css" href="./styles.css" />
 
-    <!-- Allows React to be run buildless via "text/babel" script below. -->
     <script
       src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"
       integrity="sha256-aS0B0wnsaDByLfE16h4MDCP1fQFccysd1YWOcV+gbBo="
@@ -25,7 +23,7 @@
       const providers = zebar.createProviderGroup({
         media: { type: "media" },
         glazewm: { type: "glazewm" },
-        network: { type: "network", refreshInterval: 2500 },
+        network: { type: "network", refreshInterval: 1000 },
         cpu: { type: "cpu" },
         memory: { type: "memory" },
       });
@@ -156,7 +154,7 @@
         // value is in bytes/sec
         const KB = 1_000;
         const MB = 1_000_000;
-        if (value < 50 * KB) return 50 * KB; // 100 kB/s
+        if (value < 50 * KB) return 50 * KB; // 50 kB/s
         if (value < 100 * KB) return 100 * KB; // 100 kB/s
         if (value < 500 * KB) return 500 * KB; // 500 kB/s
         if (value < 1 * MB) return 1 * MB; // 1 MB/s
@@ -166,12 +164,13 @@
         if (value < 50 * MB) return 50 * MB; // 50 MB/s
         if (value < 100 * MB) return 100 * MB; // 100 MB/s
         if (value < 250 * MB) return 250 * MB; // 250 MB/s
-        return 500 * MB; // 500 MB/s (500 MB/s = ~4 Gbps)
+        return 500 * MB; // 500 MB/s (~4 Gbps)
       }
 
       function App() {
         const [output, setOutput] = useState(providers.outputMap);
         const [spotifySession, setSpotifySession] = useState(null);
+        const [networkMax, setNetworkMax] = useState(1_000_000); // Start at 1MB/s
 
         useEffect(() => {
           providers.onOutput(() => setOutput(providers.outputMap));
@@ -183,6 +182,36 @@
           );
           setSpotifySession(mySpotifySession || null);
         }, [output.media?.allSessions]);
+
+        // Hook to handle the smoothing of the network graph's max value
+        useEffect(() => {
+          if (output.network?.traffic) {
+            const currentReceived = output.network.traffic.received.bytes;
+            const currentTransmitted = output.network.traffic.transmitted.bytes;
+            const currentMaxTraffic = Math.max(currentReceived, currentTransmitted);
+
+            // Calculate the 'ideal' max tier based on the current traffic peak
+            const idealMaxTier = getNetworkGraphMax(currentMaxTraffic);
+
+            setNetworkMax(prevMax => {
+              // Instant increase: If the current traffic pushes the max to a higher tier, adopt it immediately.
+              if (idealMaxTier > prevMax) {
+                return idealMaxTier;
+              }
+
+              // Slow decrease: If the traffic has dropped, let the max slowly decay.
+              if (idealMaxTier < prevMax) {
+                const decayFactor = 0.99; 
+                const newDecayedMax = prevMax * decayFactor;
+
+                // Ensure the new max doesn't fall below the ideal tier.
+                return Math.max(idealMaxTier, newDecayedMax);
+              }
+
+              return prevMax; // Traffic is within the current max, so keep it steady.
+            });
+          }
+        }, [output.network?.traffic]); // Depend on network traffic updates
 
         // Get icon to show for current network status.
         function getNetworkIcon(networkOutput) {
@@ -286,13 +315,11 @@
                   <NetworkGraph
                     value={output.network.traffic.received.bytes}
                     color="#ff007a"
-                    max={getNetworkGraphMax(
-                      output.network.traffic.received.bytes
-                    )}
+                    max={networkMax}
                   />
                   <div
                     style={{
-                      width: "80px",
+                      width: "100px",
                       textAlign: "left",
                       marginRight: 8,
                     }}
@@ -319,13 +346,11 @@
                   <NetworkGraph
                     value={output.network.traffic.transmitted.bytes}
                     color="#b400ff"
-                    max={getNetworkGraphMax(
-                      output.network.traffic.transmitted.bytes
-                    )}
+                    max={networkMax}
                   />
                   <div
                     style={{
-                      width: "80px",
+                      width: "100px",
                       textAlign: "left",
                       marginRight: 8,
                     }}
@@ -336,7 +361,7 @@
                         fontWeight: "bold",
                         textShadow: "0 0 8px #b400ff",
                         display: "flex",
-                        alignItems: "flex-end",
+                        alignItems: "flex-end"
                       }}
                     >
                       <i
